@@ -1,0 +1,53 @@
+name: CI (Java)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'pom.xml'
+      - 'src/**'
+      - 'Dockerfile'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'pom.xml'
+      - 'src/**'
+      - 'Dockerfile'
+      - '.github/workflows/**'
+
+concurrency:
+  group: ci-java-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Normalize wrapper properties EOL
+        run: sed -i 's/\r$//' .mvn/wrapper/maven-wrapper.properties
+
+      - name: Make mvnw executable
+        run: chmod +x mvnw
+
+      - name: Maven Verify (com testes)
+        run: ./mvnw -B -fae -Dstyle.color=always verify
+
+      # Opcional: publicar relatório de testes no summary
+      - name: Test Summary
+        if: always()
+        run: |
+          echo '### Test Results' >> $GITHUB_STEP_SUMMARY
+          grep -R "<testsuite" -n target/surefire-reports || true

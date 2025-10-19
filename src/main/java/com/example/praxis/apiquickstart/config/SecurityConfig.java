@@ -16,11 +16,31 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // tudo protegido: Swagger e APIs exigem Basic Auth
+                // Swagger UI e OpenAPI públicas
+                .requestMatchers(
+                        "/swagger-ui.html",
+                        "/swagger-ui/index.html",
+                        "/swagger-ui/**",
+                        "/v3/api-docs",
+                        "/v3/api-docs/**",
+                        "/v3/api-docs.yaml"
+                ).permitAll()
+                // Health público para health checks (Render)
+                .requestMatchers(
+                        "/actuator/health",
+                        "/actuator/health/**"
+                ).permitAll()
+                // Home pública e assets estáticos
+                .requestMatchers(
+                        "/",
+                        "/index.html",
+                        "/favicon.ico",
+                        "/assets/**"
+                ).permitAll()
+                // Demais endpoints protegidos por Basic Auth
                 .anyRequest().authenticated()
             )
             .httpBasic(Customizer.withDefaults());
         return http.build();
     }
 }
-
