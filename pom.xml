@@ -36,6 +36,11 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- Spring Security for Basic Auth protection -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
         <!-- Praxis Metadata Starter (auto-config + OpenAPI x-ui enrichment + /schemas/filtered) -->
         <dependency>
             <groupId>io.github.codexrodrigues</groupId>
