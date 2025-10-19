@@ -25,6 +25,9 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
 
+      - name: Make mvnw executable
+        run: chmod +x mvnw
+
       - name: Build (skip tests)
         run: ./mvnw -B -DskipTests -ntp package
 
