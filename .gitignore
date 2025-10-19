@@ -1,0 +1,39 @@
+# Java/Maven/IDE ignores
+# Maven
+/target/
+.mvn/wrapper/maven-wrapper.jar
+
+# IDEs
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files (keep examples)
+.env
+.env.local
+.env.*.local
+*.log
+
+# JVM crash logs
+hs_err_pid*
+
+# Editor/merge temps
+*.orig
+*.rej
+*.swp
+*.swo
+*~
+
+# Env files (block all except examples)
+.env.*
+!.env.*.example
+
+# Maven Shade leftover (if ever used)
+dependency-reduced-pom.xml
