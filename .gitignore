@@ -37,3 +37,11 @@ hs_err_pid*
 
 # Maven Shade leftover (if ever used)
 dependency-reduced-pom.xml
+
+# Database dumps (do not commit)
+db/dump/*.sql
+db/dump/*.sql.gz
+db/init/*.sql
+db/init/*.sql.gz
+docs/*.sql
+docs/*.sql.gz

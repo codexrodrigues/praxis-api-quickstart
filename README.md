@@ -226,7 +226,7 @@ mvn  -B -DskipTests package
 ```
 # carrega .env.dev.example manualmente ou exporte variáveis
 SPRING_PROFILES_ACTIVE=dev \
-SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/praxis?sslmode=disable \
+SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/neondb?sslmode=disable \
 SPRING_DATASOURCE_USERNAME=postgres \
 SPRING_DATASOURCE_PASSWORD=postgres \
 java -jar target/praxis-api-quickstart-1.0.0-SNAPSHOT.jar
@@ -330,29 +330,19 @@ curl -s -X POST 'http://localhost:8088/api/human-resources/funcionarios/options/
 - Se um provedor fornecer apenas `DATABASE_URL` no formato DSN, converta para JDBC antes de setar `SPRING_DATASOURCE_URL`.
 - Dependência do Praxis no Central: `io.github.codexrodrigues:praxis-metadata-starter` (nenhuma etapa prévia de build local é necessária).
 
-## CI/Deploy (Render)
+## CI (GitHub Actions)
 
-Este repositório inclui um workflow do GitHub Actions para acionar o deploy no Render.
+Este repositório usa CI-only (sem deploy) para build e testes com Java 21 e Maven Wrapper.
 
-- Arquivo do workflow: `.github/workflows/render-deploy.yml`
-- Disparos: push na branch `main` ou manual (`workflow_dispatch`).
-- Passos:
-  - Build com Java 21 e Maven Wrapper (`./mvnw -B -DskipTests -ntp package`).
-  - Chama o Deploy Hook do Render.
+- Workflow: `.github/workflows/ci-java.yml`
+- Disparos: `push` e `pull_request` na branch `main`
+- Passos principais:
+  - `actions/setup-java@v4` (Temurin 21, cache Maven)
+  - Normalização de EOL do wrapper e `chmod +x mvnw`
+  - `./mvnw -B -fae -Dstyle.color=always verify`
+- Sem deploy: não há hooks, secrets ou chamadas ao Render nos workflows.
 
-Configuração necessária (uma vez):
-1. No Render, crie/configure o serviço web apontando para este repo (ou use um Deploy Hook existente).
-2. Copie a URL do Deploy Hook do serviço no Render.
-3. No GitHub (Settings → Secrets and variables → Actions → New repository secret):
-   - Nome: `RENDER_DEPLOY_HOOK`
-   - Valor: URL completa do Deploy Hook do Render.
-4. Configure as variáveis no Render (Dashboard → Environment):
-   - `SPRING_PROFILES_ACTIVE=prod`
-   - `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`
-   - `DB_POOL_SIZE` (opcional)
-   - `PRACTICE_TEMP_PASSWORD` (senha do Basic Auth temporário)
-
-Após isso, cada push em `main` roda o build e aciona o deploy no Render.
+Implantação no Render (produção) deve ser configurada diretamente no painel do Render (Build/Start command e variáveis de ambiente). Não há workflow de deploy neste repositório.
 
 ## Docker (opcional)
 
@@ -372,6 +362,53 @@ docker run --rm \
 ## Projetos relacionados
 - Seed do backend (Spring Boot): https://github.com/codexrodrigues/praxis-backend-seed-app
 - Quickstart Angular: em breve
+
+## Banco local (Docker)
+
+Suba um PostgreSQL 17 local com Docker e conecte a aplicação usando o profile `dev`.
+
+1) Subir o banco
+```
+docker compose -f dev/docker-compose.local.yml up -d db
+# Aguarde o healthcheck ficar saudável
+docker compose -f dev/docker-compose.local.yml ps
+```
+
+Credenciais padrão do compose:
+- host: localhost
+- port: 5432
+- db: praxis
+- user: postgres
+- password: postgres
+
+2) Importar um dump SQL existente
+- Opção A — Import automático (primeiro start): copie o arquivo para `db/init/` e então rode `docker compose -f dev/docker-compose.local.yml up -d db`. A imagem oficial do Postgres executa automaticamente `*.sql`, `*.sql.gz` e `*.sh` em `/docker-entrypoint-initdb.d` quando o volume de dados ainda não existe.
+- Opção B — Compose com profile de seed (qualquer momento): renomeie o dump para um nome curto (recomendado: `neon-init.sql`) e coloque em `db/dump/`, depois execute:
+```
+docker compose -f dev/docker-compose.local.yml --profile seed up -d db db-seed
+# ou, para um arquivo com nome diferente:
+SEED_FILE=meu-dump.sql docker compose -f dev/docker-compose.local.yml --profile seed up -d db db-seed
+```
+- Opção C — Import manual (qualquer momento):
+```
+bash scripts/db-import.sh /caminho/para/neon-init.sql
+```
+
+3) Apontar a aplicação para o banco local (dev)
+- Via env (exemplo):
+```
+SPRING_PROFILES_ACTIVE=dev \
+SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/neondb?sslmode=disable \
+SPRING_DATASOURCE_USERNAME=postgres \
+SPRING_DATASOURCE_PASSWORD=postgres \
+./mvnw -B -DskipTests spring-boot:run
+```
+- As propriedades `application-dev.properties` já possuem esses defaults; setar as envs é opcional.
+
+Observações
+- Se já existir volume de dados (`db_data`), scripts em `db/init` não rodam novamente (comportamento padrão da imagem Postgres).
+- Para “resetar” e importar do zero: `docker compose -f dev/docker-compose.local.yml down -v && docker compose -f dev/docker-compose.local.yml up -d db` (cuidado — destrói os dados locais).
+- Dumps com `CREATE DATABASE` podem ser usados; o compose já cria a base padrão `praxis` (POSTGRES_DB). Se necessário, ajuste `DB_NAME` e `DB_USER` no profile de seed.
 
 ## Higiene de commits (o que commitar)
 

@@ -6,3 +6,7 @@ Dockerfile
 docker-compose.yml
 **/.DS_Store
 **/node_modules
+db/dump
+db/init
+docs/*.sql
+docs/*.sql.gz
