@@ -126,7 +126,7 @@ sequenceDiagram
 ## Mapa do código (este repo)
 
 - Aplicação: `src/main/java/com/example/praxis/apiquickstart/ApiQuickstartApplication.java`
-- Segurança: `src/main/java/com/example/praxis/apiquickstart/config/SecurityConfig.java` — Swagger, Home e Health públicos; demais rotas com Basic Auth.
+- Segurança: `src/main/java/com/example/praxis/apiquickstart/config/SecurityConfig.java` — Swagger, Home e Health públicos; demais rotas com sessão via cookie (JWT).
 - Paths da API: `src/main/java/com/example/praxis/apiquickstart/constants/ApiPaths.java` — prefixos como `/api/human-resources/...`.
 - Propriedades: `src/main/resources/application.properties` (base), `src/main/resources/application-dev.properties`, `src/main/resources/application-prod.properties`.
 - Página pública: `src/main/resources/static/index.html` e assets em `src/main/resources/static/assets/`.
@@ -137,7 +137,7 @@ Pequeno projeto Spring Boot com `praxis-metadata-starter` pronto para consumir v
 - `io.github.codexrodrigues:praxis-metadata-starter` — auto-configuração, `/schemas/filtered` e enriquecimento OpenAPI x-ui.
 - `org.springframework.boot:spring-boot-starter-data-jpa`
 - `org.postgresql:postgresql`
-- `org.springframework.boot:spring-boot-starter-security` (Basic Auth temporária)
+- `org.springframework.boot:spring-boot-starter-security` (CSRF, headers e filtros)
 - `org.springframework.boot:spring-boot-starter-actuator` (health checks)
 
 ## Perfis e variáveis
@@ -179,25 +179,43 @@ No dashboard do Render, defina as variáveis de ambiente:
 - `SPRING_DATASOURCE_PASSWORD`
 - `DB_POOL_SIZE` (opcional)
 
+Segurança (sessão por cookie):
+- `PRACTICE_TEMP_PASSWORD` — senha do usuário `admin` (usada no `/auth/login`)
+- `APP_JWT_SECRET` — segredo forte (≥32 bytes) para assinar o JWT
+- `APP_JWT_EXP_MIN` — expiração em minutos (ex.: `60`)
+- `CORS_ALLOWED_ORIGINS` — origem da UI (ex.: `https://sua-ui.exemplo.com`)
+- `APP_SESSION_SECURE=true` — obrigatório em produção (HTTPS)
+- `APP_SESSION_SAMESITE=None` — se a UI estiver em outro domínio
+- `APP_SESSION_COOKIE_NAME=SESSION` (opcional)
+
 Opcionalmente, se o provedor expõe `DATABASE_URL` (DSN), mantenha também `SPRING_DATASOURCE_URL` com a versão JDBC.
 
-### Segurança (temporária)
-- Todos os endpoints da API exigem Basic Auth (temporário para ambientes públicos).
-- Credenciais padrão: usuário `admin` e senha via env `PRACTICE_TEMP_PASSWORD` (definida no Render). Para testes locais, se a env não estiver definida, usa `changeMe!`.
-- Endpoints públicos:
-  - Home: `/`
-  - Swagger e OpenAPI: `/swagger-ui/**`, `/v3/api-docs/**`
-  - Health check: `/actuator/health`
+### Segurança (SPA-friendly, sem IdP)
+- Swagger/OpenAPI continuam públicos (dev e prod), assim como Home e Health.
+- As rotas da API (`/api/**`) exigem autenticação por cookie HttpOnly com JWT (sem IdP/BFF).
+- Fluxo simples:
+  - `POST /auth/login` com `{"username":"admin","password":"<env>"}` → retorna `204` e envia cookie `SESSION` (HttpOnly) com JWT (expiração configurável via `APP_JWT_EXP_MIN`).
+  - Requisições subsequentes usam o cookie automaticamente (Angular: `withCredentials: true`).
+  - `POST /auth/logout` apaga o cookie de sessão.
+- CSRF: habilitado via `CookieCsrfTokenRepository`. Angular adiciona `X-XSRF-TOKEN` automaticamente (use `HttpClientXsrfModule`).
+- CORS: configure `CORS_ALLOWED_ORIGINS` (dev pode usar `*`; para enviar cookies, defina a origem exata, ex.: `http://localhost:4200`).
 
-Exemplos de teste:
+Exemplos rápidos:
 ```
 curl -i https://praxis-api-quickstart.onrender.com/actuator/health
 # → 200 OK (público)
 
 curl -i https://praxis-api-quickstart.onrender.com/api/human-resources/funcionarios
-# → 401 Unauthorized
+# → 401 Unauthorized (sem cookie)
 
-curl -i -u admin:$PRACTICE_TEMP_PASSWORD \
+curl -i -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"'$PRACTICE_TEMP_PASSWORD'"}' \
+  https://praxis-api-quickstart.onrender.com/auth/login
+# → 204 No Content + Set-Cookie: SESSION=...
+
+# Após login, reutilize o cookie (ex.: com curl -b/-c ou no browser)
+curl -i -b cookies.txt -c cookies.txt \
   https://praxis-api-quickstart.onrender.com/api/human-resources/funcionarios
 # → 200 OK (autenticado)
 ```
@@ -206,7 +224,7 @@ curl -i -u admin:$PRACTICE_TEMP_PASSWORD \
 - URL pública do Swagger UI: https://praxis-api-quickstart.onrender.com/swagger-ui/index.html
  - Home pública: https://praxis-api-quickstart.onrender.com/
  - A documentação OpenAPI usada pelo UI também está pública: `/v3/api-docs` e `/v3/api-docs/**`.
- - As demais rotas da API permanecem protegidas por Basic Auth (usuário `admin` e senha em `PRACTICE_TEMP_PASSWORD`).
+ - As demais rotas da API permanecem protegidas por sessão (cookie HttpOnly com JWT via `/auth/login`).
 
 ### Capturas de tela
 - Em breve: screenshots da Home e do Swagger UI renderizados em produção.
@@ -226,7 +244,7 @@ mvn  -B -DskipTests package
 ```
 # carrega .env.dev.example manualmente ou exporte variáveis
 SPRING_PROFILES_ACTIVE=dev \
-SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/neondb?sslmode=disable \
+SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/praxis?sslmode=disable \
 SPRING_DATASOURCE_USERNAME=postgres \
 SPRING_DATASOURCE_PASSWORD=postgres \
 java -jar target/praxis-api-quickstart-1.0.0-SNAPSHOT.jar
@@ -238,6 +256,15 @@ Swagger UI: http://localhost:8088/swagger-ui/index.html
 - Swagger UI: `http://localhost:8088/swagger-ui/index.html`
 - Health check: `http://localhost:8088/actuator/health`
 - Schemas enriquecidos (exemplo): `/schemas/filtered?path=/api/human-resources/funcionarios&operation=post&schemaType=request`
+- Autenticação: `POST /auth/login` (body `{username,password}`) e `POST /auth/logout`
+
+### Integração Angular (dev)
+- CORS: defina `CORS_ALLOWED_ORIGINS=http://localhost:4200`
+- Cookies: use `withCredentials: true` em chamadas HTTP
+- CSRF: configure `HttpClientXsrfModule.withOptions({ cookieName: 'XSRF-TOKEN', headerName: 'X-XSRF-TOKEN' })`
+- Fluxo:
+  - POST `/auth/login` com credenciais (`admin` / `$PRACTICE_TEMP_PASSWORD`)
+  - Em seguida, use `/api/**` normalmente; o cookie `SESSION` será enviado automaticamente
 
 ## Padrões de SELECTs e Filtros (Options)
 
